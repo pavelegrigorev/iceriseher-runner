@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#16294a">
+<title>İçərişəhər Runner — беготня по Старому городу</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏰</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="app">
+  <canvas id="game" width="960" height="540"></canvas>
+
+  <div id="ui">
+
+    <!-- ------------------------------------------------------- title -->
+    <div class="screen" id="screen-title">
+      <div class="plate">
+        <div class="ornament">۞</div>
+        <h1>İÇƏRİŞƏHƏR<span>RUNNER</span></h1>
+        <p class="sub">Бесконечная беготня по крышам и базарам Старого города Баку</p>
+        <div class="row">
+          <button id="btn-start" class="btn primary">Играть</button>
+          <button id="btn-help" class="btn">Как играть</button>
+        </div>
+        <p class="hint">или нажми <kbd>Пробел</kbd></p>
+      </div>
+    </div>
+
+    <!-- -------------------------------------------------------- help -->
+    <div class="screen hidden" id="screen-help">
+      <div class="plate wide">
+        <h2>Как играть</h2>
+        <div class="keys">
+          <div><kbd>←</kbd><kbd>→</kbd><span>бежать</span></div>
+          <div><kbd>Пробел</kbd> / <kbd>↑</kbd><span>прыжок, второй в воздухе — двойной</span></div>
+          <div><kbd>↓</kbd><span>подкат на бегу, спрыгнуть с навеса, отпустить канат</span></div>
+          <div><kbd>J</kbd> / <kbd>Z</kbd><span>удар саблей</span></div>
+          <div><kbd>K</kbd> / <kbd>Shift</kbd><span>бросить гранат <em>(нар)</em></span></div>
+          <div><kbd>P</kbd> / <kbd>Esc</kbd><span>пауза</span></div>
+          <div><kbd>M</kbd><span>звук</span></div>
+        </div>
+        <p class="note">Герой живой: вытягивается в прыжке и сплющивается при
+          приземлении, крутит сальто на двойном прыжке, тормозит юзом при развороте,
+          рубит саблей в три фазы с замахом и проводкой, а если оставить его стоять —
+          начинает оглядываться и поправлять папаху.</p>
+        <p class="note">Музыка живая: нагара и деф держат ритм 6/8, бас качает тонику,
+          тар ведёт мелодию, зурна вступает соло каждые четыре такта. У каждого района
+          свой лад, темп и реверберация — в хамаме гулко, на базаре сухо и быстро.
+          В бою с боссом всё переходит на повышенную передачу.</p>
+        <ul class="tips">
+          <li>Город <b>бесконечный</b>: бежишь в своём темпе, счёт растёт с каждым метром. Немного вернуться назад можно, но улица за спиной постепенно закрывается.</li>
+          <li>Дорога идёт через <b>пять районов</b>, и каждый выглядит и звучит по-своему: Улицы крепости, Караван-сарай, Крыши, Хамам с подземельем, Морские ворота. Название района выпадает на экран, когда в него забегаешь.</li>
+          <li>За пятым районом ждёт <b>финальный босс — Царь огня</b> на площади огня: три фазы, столбы пламени из мостовой, валы огня (низкий перепрыгнуть, высокий пройти подкатом), веер фаерболов и метеоры. Между атаками у него раскрывается <b>ядро</b> — попадания в этот момент бьют вдвое. За победу полное восстановление и <b>второй круг</b>: те же районы, но злее, и боссы крепче.</li>
+          <li>Каждый район заканчивается <b>боссом</b> в закрытом дворе: ворота вперёд не откроются, пока он не падёт. У каждого своя манера — начальник стражи прикрывается щитом (бей со спины или после его рывка), хозяин базара катит кувшины и сыплет монетами, вороний царь достаётся только гранатом, пока не сядет отдохнуть, див поднимает гейзеры из пола, а каспийский дракон уязвим только когда высунул голову из воды. На половине здоровья все звереют. За победу — щедрые трофеи.</li>
+          <li><b>Ковры на верёвках</b> над пропастью — прыгай, цепляйся, раскачивайся стрелками и отпускай прыжком.</li>
+          <li><b>Кто мешает:</b> стражник с саблей, змея, ворона, уличный пёс (бросается в разгон), скорпион, лучник со стены, летучая мышь под сводами и пехлеван с дубиной — этот держит три удара и бьёт по земле волной.</li>
+          <li><b>Что мешает:</b> шипы, жаровни, качающееся кадило, срывающийся сверху камень, осыпающаяся черепица на крышах и катящийся кувшин на базаре. А вот <b>паровая отдушина в хамаме</b> не бьёт, а подбрасывает наверх.</li>
+          <li><b>Стрелу можно отбить саблей</b> — за это дают очки.</li>
+          <li><b>Гранат</b> — снаряд, <b>армуду с чаем</b> — жизнь, <b>синий камень</b> и <b>шафран</b> — очки, <b>пахлава</b> — сладкие очки, <b>ковёр-самолёт</b> — планирование и магнит на 10 секунд.</li>
+          <li>Убийства подряд копят <b>комбо</b> — множитель на всё.</li>
+          <li>Кувшины разбиваются и сыплют золото. Голуби разлетаются, если пробежать сквозь стаю.</li>
+        </ul>
+        <button id="btn-help-back" class="btn">Назад</button>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------------- pause -->
+    <div class="screen hidden" id="screen-pause">
+      <div class="plate">
+        <div class="ornament">۞</div>
+        <h2>Пауза</h2>
+        <div class="row">
+          <button id="btn-resume" class="btn primary">Продолжить</button>
+          <button id="btn-retry" class="btn">Заново</button>
+          <button id="btn-menu" class="btn">В меню</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------------------------------------------------- game over -->
+    <div class="screen hidden" id="screen-over">
+      <div class="plate">
+        <div class="ornament">۞</div>
+        <h2>Oyun bitdi</h2>
+        <p class="sub">Игра окончена</p>
+        <div class="stats">
+          <div><span>Очки</span><b id="over-score">0</b></div>
+          <div><span>Дистанция</span><b id="over-dist">0 m</b></div>
+          <div><span>Золото</span><b id="over-coins">0</b></div>
+          <div><span>Побеждено</span><b id="over-kills">0</b></div>
+          <div><span>Рекорд</span><b id="over-best">0</b></div>
+        </div>
+        <p class="newbest hidden" id="over-newbest">★ Новый рекорд! ★</p>
+        <div class="row">
+          <button id="btn-retry2" class="btn primary">Ещё раз</button>
+          <button id="btn-menu2" class="btn">В меню</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------- corner buttons -->
+    <div class="corner">
+      <button id="btn-mute" class="mini" title="Звук (M)">🔊</button>
+      <button id="btn-pause" class="mini" title="Пауза (P)">⏸</button>
+    </div>
+
+    <!-- ------------------------------------------------ touch controls -->
+    <div id="touch">
+      <div class="pad left">
+        <button class="tbtn" data-btn="left">◀</button>
+        <button class="tbtn" data-btn="right">▶</button>
+        <button class="tbtn small" data-btn="down">▼</button>
+      </div>
+      <div class="pad right">
+        <button class="tbtn act" data-btn="throw">🍎</button>
+        <button class="tbtn act" data-btn="slash">⚔</button>
+        <button class="tbtn act big" data-btn="jump">▲</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="src/core.js"></script>
+<script src="src/zones.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/input.js"></script>
+<script src="src/fx.js"></script>
+<script src="src/art.js"></script>
+<script src="src/world.js"></script>
+<script src="src/entities.js"></script>
+<script src="src/boss.js"></script>
+<script src="src/hud.js"></script>
+<script src="src/game.js"></script>
+</body>
+</html>
