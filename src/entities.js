@@ -31,16 +31,19 @@
       return {
         x: 120, y: C.GROUND_Y - 56, w: 28, h: 56,
         vx: 0, vy: 0, facing: 1,
-        grounded: false, prevBottom: 0,
+        // he is placed exactly on the paving, so he starts standing on it —
+        // otherwise a jump on the very first frame reads as a mid-air one
+        grounded: true, prevBottom: C.GROUND_Y,
         state: 'idle',
         animT: 0,
-        jumps: 0, coyote: 0, buffer: 0,
+        jumps: 0, coyote: C.COYOTE, buffer: 0,
         slashT: 0, slashDur: 0.2, slashCd: 0, slashId: 0,
         throwT: 0, throwDur: 0.22, throwCd: 0,
         invulT: 0, hurtT: 0,
         sliding: false, slideT: 0,
         carpetT: 0,
         rope: null, ropeCd: 0, ropeOmega: 0,
+        dropT: 0,
         dead: false, deadT: 0,
         stepT: 0,
         // ---- purely visual state, all of it read by the renderer
@@ -242,7 +245,13 @@
 
       /* ------------------------------------------------------- integrate */
       p.prevBottom = p.y + p.h;
-      const dropThrough = In.held('down') && p.grounded;
+      /* Dropping through an awning has to outlive the frame it starts on:
+         the moment he leaves the plank he is no longer grounded, so a
+         condition rebuilt from `grounded` each frame lets him fall a fraction
+         of a pixel and immediately catch the same plank again. */
+      if (In.held('down') && p.grounded && !p.sliding) p.dropT = 0.2;
+      p.dropT = Math.max(0, p.dropT - dt);
+      const dropThrough = p.dropT > 0;
 
       p.x += p.vx * dt;
       this.collideX(p);

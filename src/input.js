@@ -18,13 +18,19 @@
   const Input = {
     now: Object.create(null),
     prev: Object.create(null),
+    /* Edges are latched, not inferred from now/prev alone. Input arrives on
+       events but is read once a frame, so a tap whose press and release both
+       land between two frames would otherwise vanish — which is exactly how
+       people use the slide button. The latch guarantees every press is seen
+       for one frame, however briefly it was held. */
+    latch: Object.create(null),
     touch: false,
 
     init() {
       window.addEventListener('keydown', (e) => {
         const a = MAP[e.code];
         if (a) {
-          if (!e.repeat) this.now[a] = true;
+          if (!e.repeat) this.press(a);
           if (a !== 'mute' && a !== 'restart') e.preventDefault();
         }
         ICH.Audio.unlock();
@@ -35,7 +41,10 @@
         if (a) { this.now[a] = false; e.preventDefault(); }
       });
 
-      window.addEventListener('blur', () => { this.now = Object.create(null); });
+      window.addEventListener('blur', () => {
+        this.now = Object.create(null);
+        this.latch = Object.create(null);
+      });
 
       this.bindTouchLayer();
 
@@ -79,7 +88,9 @@
         }
         for (const el of pads) {
           const act = el.dataset.btn;
-          this.now[act] = !!hit[act];
+          const on = !!hit[act];
+          if (on && !this.now[act]) this.press(act);
+          else this.now[act] = on;
         }
       };
 
@@ -103,7 +114,7 @@
       // mouse fallback so the controls can be tried on a desktop too
       pads.forEach((el) => {
         const act = el.dataset.btn;
-        const down = (e) => { e.preventDefault(); this.now[act] = true; el.classList.add('down'); ICH.Audio.unlock(); };
+        const down = (e) => { e.preventDefault(); this.press(act); el.classList.add('down'); ICH.Audio.unlock(); };
         const up = () => { this.now[act] = false; el.classList.remove('down'); };
         el.addEventListener('mousedown', down);
         el.addEventListener('mouseup', up);
@@ -126,19 +137,26 @@
         if (p.buttons[2] && p.buttons[2].pressed) this.now.slash = true;
         if (p.buttons[3] && p.buttons[3].pressed) this.now.throw = true;
         if (p.buttons[9] && p.buttons[9].pressed) this.now.pause = true;
-        return;
+        return; // first connected pad wins
       }
+    },
+
+    /** Register a press that must survive until the frame reads it. */
+    press(a) {
+      this.now[a] = true;
+      this.latch[a] = true;
     },
 
     /** Call once per frame, after the frame has consumed the state. */
     endFrame() {
       this.prev = Object.assign(Object.create(null), this.now);
+      this.latch = Object.create(null);
     },
 
     held(a) { return !!this.now[a]; },
-    pressed(a) { return !!this.now[a] && !this.prev[a]; },
+    pressed(a) { return (!!this.now[a] && !this.prev[a]) || !!this.latch[a]; },
     released(a) { return !this.now[a] && !!this.prev[a]; },
-    consume(a) { this.now[a] = false; this.prev[a] = false; },
+    consume(a) { this.now[a] = false; this.prev[a] = false; this.latch[a] = false; },
   };
 
   ICH.Input = Input;

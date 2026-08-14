@@ -1,0 +1,8 @@
+{
+  "name": "iceriseher-runner",
+  "private": true,
+  "description": "Endless 2D action platformer set in the Old City of Baku. No dependencies, no assets, no build.",
+  "scripts": {
+    "test": "node tests/run.js"
+  }
+}

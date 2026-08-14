@@ -827,11 +827,17 @@
       return z;
     },
 
+    /** Record where a district starts. Trimmed here and nowhere else, so no
+        caller can grow the list without bound. */
+    mark(x, zone) {
+      this.marks.push({ x, zone });
+      while (this.marks.length > 24) this.marks.shift();
+    },
+
     advanceZone(x, rng) {
       this.zoneIndex = (this.zoneIndex + 1) % ICH.Zones.length;
       this.chunksLeft = rng.i(4, 7);
-      this.marks.push({ x, zone: ICH.Zones[this.zoneIndex] });
-      if (this.marks.length > 24) this.marks.shift();
+      this.mark(x, ICH.Zones[this.zoneIndex]);
     },
 
     /* ------------------------------------------------------- primitives */
@@ -1003,7 +1009,7 @@
         if (this.zoneIndex === ICH.Zones.length - 1) {
           // five districts down: the road opens onto the fire yard
           this.after = 'final';
-          this.marks.push({ x, zone: ICH.FinalZone });
+          this.mark(x, ICH.FinalZone);
           this.nextX = x + this.tFinalArena(x, d, rng);
           return;
         }
