@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#16294a">
+<meta name="theme-color" content="#17100a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="İçərişəhər">
 <title>İçərişəhər Runner — беготня по Старому городу</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏰</text></svg>">
 <link rel="stylesheet" href="styles.css">
@@ -101,8 +105,20 @@
       </div>
     </div>
 
+    <!-- ---------------------------------------------- rotate the phone -->
+    <div class="screen hidden" id="screen-rotate">
+      <div class="plate rotate">
+        <div class="phone"><span class="phone-body"></span></div>
+        <h2>Поверни телефон</h2>
+        <p class="sub">İçərişəhər Runner — игра для горизонтального экрана.
+          Разверни устройство, и город откроется целиком.</p>
+        <button id="btn-rotate-play" class="btn primary">Во весь экран</button>
+      </div>
+    </div>
+
     <!-- ------------------------------------------------- corner buttons -->
     <div class="corner">
+      <button id="btn-full" class="mini" title="Во весь экран">⛶</button>
       <button id="btn-mute" class="mini" title="Звук (M)">🔊</button>
       <button id="btn-pause" class="mini" title="Пауза (P)">⏸</button>
     </div>
@@ -110,14 +126,14 @@
     <!-- ------------------------------------------------ touch controls -->
     <div id="touch">
       <div class="pad left">
-        <button class="tbtn" data-btn="left">◀</button>
-        <button class="tbtn" data-btn="right">▶</button>
-        <button class="tbtn small" data-btn="down">▼</button>
+        <button class="tbtn" data-btn="left" aria-label="влево">◀</button>
+        <button class="tbtn" data-btn="right" aria-label="вправо">▶</button>
+        <button class="tbtn small" data-btn="down" aria-label="подкат">▼</button>
       </div>
       <div class="pad right">
-        <button class="tbtn act" data-btn="throw">🍎</button>
-        <button class="tbtn act" data-btn="slash">⚔</button>
-        <button class="tbtn act big" data-btn="jump">▲</button>
+        <button class="tbtn act small" data-btn="throw" aria-label="гранат">🍎</button>
+        <button class="tbtn act" data-btn="slash" aria-label="сабля">⚔</button>
+        <button class="tbtn act big" data-btn="jump" aria-label="прыжок">▲</button>
       </div>
     </div>
 

@@ -12,14 +12,16 @@
   /* Layers are generated per cell from a stable hash, so scrolling forever
      never drifts and nothing has to be kept in memory. */
 
-  const HORIZON = 300;
+  /** Screen y of the waterline. Anchored to the bottom so the skyline keeps
+      its distance from the street whatever the viewport aspect is. */
+  const horizon = () => C.H - 240;
 
   const Backdrop = {
     layers: [
-      { id: 0, par: 0.10, cellW: 520, color: P.layerSea, base: HORIZON },
-      { id: 1, par: 0.22, cellW: 430, color: P.layerFar, base: HORIZON + 22 },
-      { id: 2, par: 0.40, cellW: 360, color: P.layerMid, base: HORIZON + 62 },
-      { id: 3, par: 0.66, cellW: 310, color: P.layerNear, base: HORIZON + 128 },
+      { id: 0, par: 0.10, cellW: 520, color: P.layerSea, baseOff: 0 },
+      { id: 1, par: 0.22, cellW: 430, color: P.layerFar, baseOff: 22 },
+      { id: 2, par: 0.40, cellW: 360, color: P.layerMid, baseOff: 62 },
+      { id: 3, par: 0.66, cellW: 310, color: P.layerNear, baseOff: 128 },
     ],
     cache: [new Map(), new Map(), new Map(), new Map(), new Map()],
     _sky: null,
@@ -125,7 +127,7 @@
       const open = 1 - T.interior;
       if (open > 0.02) {
         // low afternoon sun washing the limestone
-        const sx = 710, sy = HORIZON - 96;
+        const sx = C.W * 0.74, sy = horizon() - 96;
         const gg = ctx.createRadialGradient(sx, sy, 6, sx, sy, 210);
         gg.addColorStop(0, U.rgbaCss(T.sun, 0.95 * open));
         gg.addColorStop(0.24, U.rgbaCss(T.sun, 0.4 * open));
@@ -210,6 +212,7 @@
       const T = ICH.Theme;
       ctx.save();
       ctx.globalAlpha = Math.max(0, 1 - T.interior * 0.85);
+      const HORIZON = horizon();
       ctx.fillStyle = T.seaCss;
       ctx.fillRect(0, HORIZON, C.W, C.H - HORIZON);
       // sun road on the water
@@ -218,7 +221,7 @@
         const y = HORIZON + 2 + i * 3.4;
         const w = 20 + i * 9 + Math.sin(time * 1.6 + i * 0.7) * 12;
         ctx.fillStyle = i % 2 ? 'rgba(255,246,214,0.4)' : 'rgba(255,255,240,0.26)';
-        ctx.fillRect(710 - w / 2, y, w, 2);
+        ctx.fillRect(C.W * 0.74 - w / 2, y, w, 2);
       }
       ctx.globalAlpha = 1;
       ctx.fillStyle = 'rgba(235,248,252,0.3)';
@@ -248,21 +251,21 @@
           const sx = i * L.cellW - ox;
           ctx.save();
           ctx.translate(sx, -oy);
-          this.drawCell(ctx, L, this.cell(L.id, i), time, i);
+          this.drawCell(ctx, L, this.cell(L.id, i), time, i, horizon() + L.baseOff);
           ctx.restore();
         }
       }
 
       // shadow pooling in the street canyon, so the sandy playfield pops out
-      const g = ctx.createLinearGradient(0, 190, 0, C.H);
+      const top = C.H - 350;
+      const g = ctx.createLinearGradient(0, top, 0, C.H);
       g.addColorStop(0, 'rgba(74,44,16,0)');
       g.addColorStop(1, 'rgba(58,32,10,' + ICH.Theme.canyon.toFixed(3) + ')');
       ctx.fillStyle = g;
-      ctx.fillRect(0, 190, C.W, C.H - 190);
+      ctx.fillRect(0, top, C.W, C.H - top);
     },
 
-    drawCell(ctx, L, cell, time, i) {
-      const base = L.base;
+    drawCell(ctx, L, cell, time, i, base) {
       L.color = ICH.Theme.layerCss[L.id];
       ctx.fillStyle = L.color;
 

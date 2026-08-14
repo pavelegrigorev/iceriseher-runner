@@ -39,6 +39,14 @@
       const t = G.time;
       ctx.textBaseline = 'alphabetic';
 
+      // On a phone the canvas is physically small, so the whole HUD is drawn
+      // magnified and laid out against the shrunken logical frame.
+      const s = C.HUD;
+      const W = C.W / s;
+      const H = C.H / s;
+      ctx.save();
+      if (s !== 1) ctx.scale(s, s);
+
       /* ---------------------------------------------------- health + ammo */
       panel(ctx, 14, 12, 30 + C.MAX_HEALTH * 26, 38);
       for (let i = 0; i < C.MAX_HEALTH; i++) {
@@ -58,15 +66,15 @@
 
       /* ---------------------------------------------------------- score */
       ctx.textAlign = 'right';
-      panel(ctx, C.W - 214, 12, 200, 66);
+      panel(ctx, W - 214, 12, 200, 66);
       ctx.font = '700 26px "Trebuchet MS", system-ui, sans-serif';
       ctx.fillStyle = P.gold;
-      ctx.fillText(String(Math.floor(G.score)).padStart(6, '0'), C.W - 26, 42);
+      ctx.fillText(String(Math.floor(G.score)).padStart(6, '0'), W - 26, 42);
       ctx.font = '600 13px "Trebuchet MS", system-ui, sans-serif';
       ctx.fillStyle = 'rgba(246,231,196,0.8)';
-      ctx.fillText(Math.floor(G.dist) + ' m', C.W - 26, 62);
+      ctx.fillText(Math.floor(G.dist) + ' m', W - 26, 62);
       ctx.fillStyle = 'rgba(246,231,196,0.45)';
-      ctx.fillText('рекорд ' + G.best, C.W - 96, 62);
+      ctx.fillText('рекорд ' + G.best, W - 96, 62);
       ctx.textAlign = 'left';
 
       /* ---------------------------------------------------------- combo */
@@ -74,7 +82,7 @@
         const a = U.clamp(G.comboT / 0.6, 0, 1);
         const scale = 1 + Math.max(0, G.comboPop) * 0.4;
         ctx.save();
-        ctx.translate(C.W / 2, 44);
+        ctx.translate(W / 2, 44);
         ctx.scale(scale, scale);
         ctx.globalAlpha = 0.35 + 0.65 * a;
         ctx.textAlign = 'center';
@@ -94,26 +102,27 @@
         ctx.textAlign = 'left';
         // draining bar
         ctx.fillStyle = 'rgba(52,28,8,0.5)';
-        ctx.fillRect(C.W / 2 - 46, 52, 92, 4);
+        ctx.fillRect(W / 2 - 46, 52, 92, 4);
         ctx.fillStyle = P.gold;
-        ctx.fillRect(C.W / 2 - 46, 52, 92 * U.clamp(G.comboT / ICH.C.COMBO_TIME, 0, 1), 4);
+        ctx.fillRect(W / 2 - 46, 52, 92 * U.clamp(G.comboT / C.COMBO_TIME, 0, 1), 4);
       }
 
       /* ------------------------------------------------------- boss bar */
       if (G.boss && !G.boss.dead && G.boss.state !== 'intro') {
         const b = G.boss;
         const w = b.final ? 560 : 420;
-        const x = C.W / 2 - w / 2;
-        const y = C.H - 76;
+        const x = W / 2 - w / 2;
+        // on a phone the bottom belongs to the thumbs, so the bar moves up top
+        const y = C.touch ? 104 : H - 76;
         panel(ctx, x - 10, y - 22, w + 20, 40);
         ctx.font = '700 13px "Trebuchet MS", system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = P.gold;
-        ctx.fillText(b.name, C.W / 2, y - 8);
+        ctx.fillText(b.name, W / 2, y - 8);
         if (b.final) {
           ctx.font = '600 10px "Trebuchet MS", system-ui, sans-serif';
           ctx.fillStyle = 'rgba(251,238,203,0.7)';
-          ctx.fillText('SON DÖYÜŞ · ФИНАЛЬНЫЙ БОЙ · ' + b.phase + '/' + b.phases, C.W / 2, y + 26);
+          ctx.fillText('SON DÖYÜŞ · ФИНАЛЬНЫЙ БОЙ · ' + b.phase + '/' + b.phases, W / 2, y + 26);
         }
         ctx.textAlign = 'left';
 
@@ -153,21 +162,22 @@
       /* -------------------------------------------------------- power-up */
       if (G.player && G.player.carpetT > 0) {
         const w = 180;
-        const x = C.W / 2 - w / 2;
-        panel(ctx, x - 8, C.H - 46, w + 16, 30);
+        const x = W / 2 - w / 2;
+        const py = H - 46 - (C.touch ? 26 : 0);
+        panel(ctx, x - 8, py, w + 16, 30);
         ctx.fillStyle = 'rgba(52,28,8,0.5)';
-        ctx.fillRect(x, C.H - 34, w, 8);
+        ctx.fillRect(x, py + 12, w, 8);
         const k = U.clamp(G.player.carpetT / 10, 0, 1);
         const g = ctx.createLinearGradient(x, 0, x + w, 0);
         g.addColorStop(0, P.carpetA);
         g.addColorStop(0.5, P.carpetC);
         g.addColorStop(1, P.carpetB);
         ctx.fillStyle = g;
-        ctx.fillRect(x, C.H - 34, w * k, 8);
+        ctx.fillRect(x, py + 12, w * k, 8);
         ctx.font = '600 11px "Trebuchet MS", system-ui, sans-serif';
         ctx.fillStyle = P.ui;
         ctx.textAlign = 'center';
-        ctx.fillText('SEHRLİ XALÇA — ковёр-самолёт', C.W / 2, C.H - 38);
+        ctx.fillText('SEHRLİ XALÇA — ковёр-самолёт', W / 2, py + 8);
         ctx.textAlign = 'left';
       }
 
@@ -178,7 +188,7 @@
         g.addColorStop(0, 'rgba(200,38,46,0.6)');
         g.addColorStop(1, 'rgba(200,38,46,0)');
         ctx.fillStyle = g;
-        ctx.fillRect(0, 0, 110, C.H);
+        ctx.fillRect(0, 0, 110, H);
         ctx.globalAlpha = 1;
       }
 
@@ -187,10 +197,12 @@
         ctx.textAlign = 'center';
         ctx.font = '600 14px "Trebuchet MS", system-ui, sans-serif';
         ctx.fillStyle = P.ui;
-        ctx.fillText(ICH.Audio.muted ? 'звук выключен (M)' : 'звук включён (M)', C.W / 2, C.H - 62);
+        ctx.fillText(ICH.Audio.muted ? 'звук выключен (M)' : 'звук включён (M)', W / 2, H - 62);
         ctx.textAlign = 'left';
         ctx.globalAlpha = 1;
       }
+    
+      ctx.restore();
     },
   };
 

@@ -161,8 +161,15 @@ window.ICH = window.ICH || {};
 
   /* ------------------------------------------------------------ constants */
   ICH.C = {
+    // The logical viewport. BASE_* is the reference frame everything is tuned
+    // against; W/H grow past it to fill whatever aspect the screen has, so a
+    // phone in landscape gets extra width instead of black bars.
+    BASE_W: 960,
+    BASE_H: 540,
     W: 960,
     H: 540,
+    HUD: 1, // HUD magnification, raised on small touch screens
+    touch: false,
     GROUND_Y: 430, // world y of the top of street level
     DEATH_Y: 720,
 

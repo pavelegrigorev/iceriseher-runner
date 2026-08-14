@@ -62,9 +62,20 @@
       this.best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
 
       FX.init();
+      C.touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0
+        || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+      document.body.classList.toggle('has-touch', C.touch);
       ICH.Input.init();
       this.resize();
       window.addEventListener('resize', () => this.resize());
+      window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 120));
+      // any first contact is enough to let the browser start audio
+      const wake = () => {
+        Audio.unlock();
+        if (!C.touch) { C.touch = true; document.body.classList.add('has-touch'); this.resize(); }
+      };
+      window.addEventListener('touchstart', wake, { once: true, passive: true });
+      window.addEventListener('pointerdown', wake, { once: true });
       window.addEventListener('blur', () => {
         if (this.state === 'playing') this.pause();
       });
@@ -79,18 +90,60 @@
     },
 
     resize() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const aw = window.innerWidth;
       const ah = window.innerHeight;
+      // a hidden or zero-sized window would collapse the frame; keep the last one
+      if (aw < 2 || ah < 2) return;
+      const aspect = aw / ah;
+
+      // Grow the logical frame along whichever axis the screen has to spare,
+      // so a wide phone sees more street instead of black bars. Clamped so an
+      // extreme aspect cannot zoom the world out to nothing.
+      C.W = Math.round(U.clamp(C.BASE_H * aspect, C.BASE_W, 1400));
+      C.H = Math.round(U.clamp(C.BASE_W / aspect, C.BASE_H, 820));
+
       const scale = Math.min(aw / C.W, ah / C.H);
       const cw = Math.floor(C.W * scale);
       const ch = Math.floor(C.H * scale);
+
+      // keep the backing store within reach of a phone GPU
+      let dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const budget = 2.6e6;
+      if (cw * ch * dpr * dpr > budget) dpr = Math.sqrt(budget / (cw * ch));
+
       this.canvas.style.width = cw + 'px';
       this.canvas.style.height = ch + 'px';
       this.canvas.width = Math.floor(cw * dpr);
       this.canvas.height = Math.floor(ch * dpr);
-      const ui = document.getElementById('ui');
-      if (ui) { ui.style.width = cw + 'px'; ui.style.height = ch + 'px'; }
+
+      // a small screen needs a proportionally bigger HUD to stay legible
+      C.HUD = ch < 420 ? 1.45 : ch < 560 ? 1.22 : 1;
+
+      this._vig = null;
+
+      this.portrait = C.touch && ah > aw * 1.05;
+      document.body.classList.toggle('portrait', !!this.portrait);
+      const rot = document.getElementById('screen-rotate');
+      if (rot) rot.classList.toggle('hidden', !this.portrait);
+      if (this.portrait && this.state === 'playing') this.pause(true);
+    },
+
+    /** Full screen plus a landscape lock, where the browser allows it. */
+    toggleFullscreen() {
+      const el = document.getElementById('app');
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (req) {
+          Promise.resolve(req.call(el)).then(() => {
+            if (screen.orientation && screen.orientation.lock) {
+              screen.orientation.lock('landscape').catch(() => {});
+            }
+          }).catch(() => {});
+        }
+      } else {
+        const exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+      }
     },
 
     bindUI() {
@@ -108,15 +161,21 @@
       on('btn-menu2', () => this.toMenu());
       on('btn-pause', () => (this.state === 'playing' ? this.pause() : this.resume()));
       on('btn-mute', () => this.toggleMute());
+      on('btn-full', () => this.toggleFullscreen());
+      on('btn-rotate-play', () => this.toggleFullscreen());
     },
 
     show(id) {
-      document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('hidden', s.id !== id));
+      document.querySelectorAll('.screen').forEach((s) => {
+        if (s.id !== 'screen-rotate') s.classList.toggle('hidden', s.id !== id);
+      });
       document.body.classList.toggle('in-game', id === null || id === '');
     },
 
     hideScreens() {
-      document.querySelectorAll('.screen').forEach((s) => s.classList.add('hidden'));
+      document.querySelectorAll('.screen').forEach((s) => {
+        if (s.id !== 'screen-rotate') s.classList.add('hidden');
+      });
     },
 
     /* -------------------------------------------------------------- flow */
@@ -158,14 +217,14 @@
       Audio.startMusic();
     },
 
-    pause() {
+    pause(silent) {
       if (this.state !== 'playing') return;
       this.state = 'paused';
-      this.show('screen-pause');
+      if (!silent) this.show('screen-pause');
     },
 
     resume() {
-      if (this.state !== 'paused') return;
+      if (this.state !== 'paused' || this.portrait) return;
       this.state = 'playing';
       this.hideScreens();
       this.last = performance.now();
@@ -336,7 +395,7 @@
       this.maxCamX = Math.max(this.maxCamX, this.camX);
       this.pushX = this.maxCamX - C.BACKTRACK;
       if (this.camX < this.pushX) this.camX = this.pushX;
-      const camYTarget = U.clamp(p.y + p.h - 400, -340, 40);
+      const camYTarget = U.clamp(p.y + p.h - (C.H - 140), -340, C.H - 500);
       this.camY = U.lerp(this.camY, camYTarget, 1 - Math.pow(0.0025, sdt));
 
       // never let the runner slip off the left edge

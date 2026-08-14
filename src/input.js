@@ -37,8 +37,7 @@
 
       window.addEventListener('blur', () => { this.now = Object.create(null); });
 
-      // On-screen buttons for phones/tablets.
-      document.querySelectorAll('[data-btn]').forEach((el) => this.bindTouch(el, el.dataset.btn));
+      this.bindTouchLayer();
 
       const markTouch = () => {
         this.touch = true;
@@ -48,24 +47,68 @@
       window.addEventListener('touchstart', markTouch, { passive: true });
     },
 
-    bindTouch(el, action) {
-      const on = (e) => {
-        e.preventDefault();
-        this.now[action] = true;
-        el.classList.add('down');
+    /* On-screen controls.
+       Rather than binding each button separately, every live touch is hit
+       tested against all of them each frame. That way a thumb can slide from
+       ◀ to ▶ without lifting, and several buttons can be held at once — both
+       of which a per-element handler gets wrong. */
+    bindTouchLayer() {
+      const pads = Array.from(document.querySelectorAll('[data-btn]'));
+      if (!pads.length) return;
+      this.pads = pads;
+      const live = new Map(); // touch id → nothing, we only need the points
+
+      const apply = (points) => {
+        const hit = Object.create(null);
+        for (const el of pads) {
+          const r = el.getBoundingClientRect();
+          if (!r.width) continue;
+          // a generous radius: thumbs are imprecise and the buttons are round
+          const cx = r.left + r.width / 2;
+          const cy = r.top + r.height / 2;
+          const rad = (r.width / 2) * 1.28;
+          let on = false;
+          for (const p of points) {
+            const dx = p.x - cx;
+            const dy = p.y - cy;
+            if (dx * dx + dy * dy <= rad * rad) { on = true; break; }
+          }
+          const act = el.dataset.btn;
+          if (on) hit[act] = true;
+          el.classList.toggle('down', on);
+        }
+        for (const el of pads) {
+          const act = el.dataset.btn;
+          this.now[act] = !!hit[act];
+        }
+      };
+
+      const collect = (e) => {
+        const pts = [];
+        for (const t of e.touches) pts.push({ x: t.clientX, y: t.clientY });
+        return pts;
+      };
+
+      const handler = (e) => {
+        if (e.cancelable) e.preventDefault();
         ICH.Audio.unlock();
+        apply(collect(e));
       };
-      const off = (e) => {
-        e.preventDefault();
-        this.now[action] = false;
-        el.classList.remove('down');
-      };
-      el.addEventListener('touchstart', on, { passive: false });
-      el.addEventListener('touchend', off, { passive: false });
-      el.addEventListener('touchcancel', off, { passive: false });
-      el.addEventListener('mousedown', on);
-      el.addEventListener('mouseup', off);
-      el.addEventListener('mouseleave', off);
+
+      const layer = document.getElementById('touch') || document;
+      ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach((n) => {
+        layer.addEventListener(n, handler, { passive: false });
+      });
+
+      // mouse fallback so the controls can be tried on a desktop too
+      pads.forEach((el) => {
+        const act = el.dataset.btn;
+        const down = (e) => { e.preventDefault(); this.now[act] = true; el.classList.add('down'); ICH.Audio.unlock(); };
+        const up = () => { this.now[act] = false; el.classList.remove('down'); };
+        el.addEventListener('mousedown', down);
+        el.addEventListener('mouseup', up);
+        el.addEventListener('mouseleave', up);
+      });
     },
 
     pollPad() {
