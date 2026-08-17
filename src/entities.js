@@ -37,7 +37,7 @@
         state: 'idle',
         animT: 0,
         jumps: 0, coyote: C.COYOTE, buffer: 0,
-        slashT: 0, slashDur: 0.2, slashCd: 0, slashId: 0,
+        slashT: 0, slashDur: 0.2, slashCd: 0, slashId: 0, slashBuf: 0,
         throwT: 0, throwDur: 0.22, throwCd: 0,
         invulT: 0, hurtT: 0,
         sliding: false, slideT: 0,
@@ -224,7 +224,14 @@
       }
 
       /* --------------------------------------------------------- attacks */
-      if (In.pressed('slash') && p.slashCd <= 0) {
+      /* The swing is buffered the same way the jump is. Without it a press
+         landing during the 0.3 s cooldown is simply thrown away, and a player
+         mashing through a pack of guards gets silence for every second tap —
+         which reads as the button not working. */
+      if (In.pressed('slash')) p.slashBuf = C.SLASH_BUFFER;
+      p.slashBuf = Math.max(0, p.slashBuf - dt);
+      if (p.slashBuf > 0 && p.slashCd <= 0) {
+        p.slashBuf = 0;
         p.slashT = p.slashDur;
         p.slashCd = 0.3;
         p.slashId++;
@@ -358,8 +365,19 @@
           p.vy = 0;
           p.grounded = true;
         } else if (p.vy < 0 && !pl.oneWay) {
-          p.y = pl.y + pl.h;
-          p.vy = 40;
+          /* Corner nudge. Clipping the underside of a slab by a few pixels
+             used to stop the jump dead, which reads as the stonework cheating
+             rather than as a miss. If a small sideways shift clears the edge,
+             take it and let the climb continue. */
+          const fromLeft = p.x + p.w - pl.x;
+          const fromRight = pl.x + pl.w - p.x;
+          const over = Math.min(fromLeft, fromRight);
+          if (over <= C.NUDGE) {
+            p.x += fromLeft < fromRight ? -(over + 1) : over + 1;
+          } else {
+            p.y = pl.y + pl.h;
+            p.vy = 40;
+          }
         }
       }
     },

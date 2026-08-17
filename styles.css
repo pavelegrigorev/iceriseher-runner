@@ -74,7 +74,10 @@ body.has-touch canvas#game { border-radius: 0; box-shadow: none; }
   background: radial-gradient(ellipse at center, rgba(30, 19, 9, 0.5), rgba(18, 11, 5, 0.86));
   backdrop-filter: blur(2px);
   animation: fade 0.25s ease;
-  padding: 16px;
+  /* a notched phone in landscape puts the camera cutout right where a menu
+     edge would be, so the inset wins whenever it is bigger */
+  padding: 16px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
 }
 
 .screen.hidden { display: none; }
@@ -195,6 +198,13 @@ h2 {
   font-size: 14px;
 }
 .keys > div { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.keys span { flex: 1 1 12ch; }
+/* one of the two control lists is always wrong for the device you are on */
+.keys.touch { display: none; }
+body.has-touch .keys.desk { display: none; }
+body.has-touch .keys.touch { display: grid; }
+
+.pane.hidden { display: none; }
 .keys span { color: rgba(246, 231, 196, 0.72); }
 .keys em { color: var(--gold); font-style: normal; }
 
@@ -281,15 +291,43 @@ kbd {
 
 /* --------------------------------------------------------- score table */
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  margin: 0 0 8px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.24);
+  border-radius: 9px;
+}
+.tab {
+  appearance: none;
+  flex: 1 1 0;
+  min-height: 34px; /* a thumb target, not a mouse target */
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(246, 231, 196, 0.6);
+  background: none;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.tab.on {
+  color: #2c1c04;
+  background: linear-gradient(180deg, var(--gold), #d29a1e);
+}
+
 .board { margin: 0 0 16px; }
 
-/* On a short landscape phone ten rows would push «Ещё раз» off the bottom of
-   the plate. The table is the part that gives: it shrinks and scrolls on its
-   own while the result and the buttons stay where the thumb expects them. */
-#screen-over .plate,
-#screen-scores .plate { display: flex; flex-direction: column; }
-#screen-over .board,
-#screen-scores .board { min-height: 5.5em; overflow-y: auto; } /* never below ~4 rows */
+/* On a short landscape phone a long list pushes the buttons off the bottom of
+   the plate. In a tabbed plate the list is the part that gives: it shrinks and
+   scrolls on its own while the heading and the buttons stay where the thumb
+   expects them. */
+.plate.tabbed { display: flex; flex-direction: column; }
+.plate.tabbed .board,
+.plate.tabbed .pane { min-height: 4.5em; overflow-y: auto; }
 .board-t { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
 .board-t td { padding: 6px 8px; border-bottom: 1px solid rgba(245, 197, 66, 0.12); }
 .board-t tr:last-child td { border-bottom: 0; }
@@ -360,9 +398,12 @@ body.has-touch .mini { width: 30px; height: 30px; font-size: 13px; opacity: 0.42
 
 /* ------------------------------------------------------ touch controls */
 
+/* Only while playing. The layer sits above the menus by design — the buttons
+   have to clear the canvas — so leaving it up would let the movement zone eat
+   taps aimed at the left half of a menu. */
 #touch { display: none; }
 
-body.has-touch #touch {
+body.has-touch.in-game #touch {
   display: block;
   position: absolute;
   inset: 0;
@@ -372,7 +413,50 @@ body.has-touch #touch {
 }
 body.portrait #touch { display: none; }
 
-/* Thumb clusters in the two bottom corners, arranged as arcs so the reach is
+/* The whole left half moves the hero: no target to find, the stick is drawn
+   wherever the thumb lands. The right side keeps real buttons — actions want
+   separate, repeatable targets, and a stick would make them worse. */
+.stick {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 46%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.stick-ring,
+.stick-knob {
+  position: fixed;
+  left: 0;
+  top: 0;
+  display: block;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.stick-ring.on,
+.stick-knob.on { opacity: 1; }
+
+.stick-ring {
+  width: 62px;
+  height: 62px;
+  margin: -31px 0 0 -31px;
+  border: 1.5px solid rgba(245, 197, 66, 0.34);
+  background: rgba(40, 25, 11, 0.26);
+  backdrop-filter: blur(2px);
+}
+.stick-knob {
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  background: rgba(245, 197, 66, 0.42);
+  border: 1.5px solid rgba(255, 230, 166, 0.7);
+}
+
+/* Thumb cluster in the bottom-right corner, arranged as an arc so the reach is
    natural and the middle of the screen stays clear of fingers. */
 .pad {
   position: absolute;
@@ -381,20 +465,12 @@ body.portrait #touch { display: none; }
   pointer-events: auto;
   touch-action: none;
 }
-.pad.left {
-  left: calc(10px + env(safe-area-inset-left));
-  grid-template-areas: ".  dn" "lf rt";
-  gap: 6px 8px;
-}
 .pad.right {
   right: calc(10px + env(safe-area-inset-right));
   grid-template-areas: "th sl" ".  jp";
   gap: 6px 8px;
   justify-items: end;
 }
-.pad.left [data-btn="left"]  { grid-area: lf; }
-.pad.left [data-btn="right"] { grid-area: rt; }
-.pad.left [data-btn="down"]  { grid-area: dn; }
 .pad.right [data-btn="throw"] { grid-area: th; }
 .pad.right [data-btn="slash"] { grid-area: sl; }
 .pad.right [data-btn="jump"]  { grid-area: jp; }
@@ -485,6 +561,5 @@ body.portrait #touch { display: none; }
   .board-t td { padding: 4px 6px; }
 }
 
-/* the keyboard hints are noise on a device that has no keyboard */
-body.has-touch .keys,
+/* the keyboard hint under the menu is noise on a device with no keyboard */
 body.has-touch .hint { display: none; }

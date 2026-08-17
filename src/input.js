@@ -68,16 +68,85 @@
       window.addEventListener('touchstart', markTouch, { passive: true });
     },
 
+    /* ------------------------------------------------------------- stick */
+    /* Movement has no button. Wherever the thumb lands on the left half of the
+       screen becomes the origin, and the pull from it steers — so the thumb
+       never has to find a target by feel, which is the thing that actually
+       goes wrong on a phone. Pull down to slide. */
+    stick: { id: null, ox: 0, oy: 0, dx: 0, dy: 0 },
+
+    /** Set an action, latching the press so a tap between two frames survives. */
+    setAction(a, on) {
+      if (on && !this.now[a]) this.press(a);
+      else this.now[a] = on;
+    },
+
+    moveStick(x, y) {
+      const C = ICH.C;
+      const st = this.stick;
+      let dx = x - st.ox;
+      let dy = y - st.oy;
+      // Past the edge the origin follows the thumb. Without this a thumb that
+      // has drifted across the glass can no longer pull back the other way
+      // without lifting — which is exactly what happens when you hold right
+      // for a while and then need left in a hurry.
+      const r = C.STICK_MAX;
+      if (dx > r) { st.ox = x - r; dx = r; } else if (dx < -r) { st.ox = x + r; dx = -r; }
+      if (dy > r) { st.oy = y - r; dy = r; } else if (dy < -r) { st.oy = y + r; dy = -r; }
+      st.dx = dx;
+      st.dy = dy;
+
+      const dead = C.STICK_DEAD;
+      // a downward pull only counts as a slide when it clearly beats the
+      // sideways one, or running with a slightly low thumb would slide forever
+      this.setAction('left', dx < -dead);
+      this.setAction('right', dx > dead);
+      this.setAction('down', dy > dead * 1.2 && dy > Math.abs(dx));
+      this.paintStick(true);
+    },
+
+    releaseStick() {
+      const st = this.stick;
+      if (st.id === null && !st.dx && !st.dy) return;
+      st.id = null;
+      st.dx = 0;
+      st.dy = 0;
+      this.now.left = false;
+      this.now.right = false;
+      this.now.down = false;
+      this.paintStick(false);
+    },
+
+    /** The ring and knob are plain elements moved by transform: cheaper than
+        anything on the canvas, and it keeps the playfield draw untouched. */
+    paintStick(on) {
+      const ring = this._ring || (this._ring = document.getElementById('stick-ring'));
+      const knob = this._knob || (this._knob = document.getElementById('stick-knob'));
+      if (!ring || !knob) return;
+      const st = this.stick;
+      ring.classList.toggle('on', !!on);
+      knob.classList.toggle('on', !!on);
+      if (!on) return;
+      ring.style.transform = 'translate(' + (st.ox | 0) + 'px,' + (st.oy | 0) + 'px)';
+      knob.style.transform = 'translate(' + ((st.ox + st.dx) | 0) + 'px,' + ((st.oy + st.dy) | 0) + 'px)';
+    },
+
     /* On-screen controls.
        Rather than binding each button separately, every live touch is hit
        tested against all of them each frame. That way a thumb can slide from
-       ◀ to ▶ without lifting, and several buttons can be held at once — both
-       of which a per-element handler gets wrong. */
+       one action to the next without lifting, and several can be held at once —
+       both of which a per-element handler gets wrong. */
     bindTouchLayer() {
       const pads = Array.from(document.querySelectorAll('[data-btn]'));
-      if (!pads.length) return;
+      const zone = document.getElementById('stick');
+      if (!pads.length && !zone) return;
       this.pads = pads;
-      const live = new Map(); // touch id → nothing, we only need the points
+
+      const inZone = (x, y) => {
+        if (!zone) return false;
+        const r = zone.getBoundingClientRect();
+        return r.width > 0 && x >= r.left && x <= r.left + r.width && y >= r.top && y <= r.top + r.height;
+      };
 
       const apply = (points) => {
         const hit = Object.create(null);
@@ -100,22 +169,39 @@
         }
         for (const el of pads) {
           const act = el.dataset.btn;
-          const on = !!hit[act];
-          if (on && !this.now[act]) this.press(act);
-          else this.now[act] = on;
+          this.setAction(act, !!hit[act]);
         }
-      };
-
-      const collect = (e) => {
-        const pts = [];
-        for (const t of e.touches) pts.push({ x: t.clientX, y: t.clientY });
-        return pts;
       };
 
       const handler = (e) => {
         if (e.cancelable) e.preventDefault();
         ICH.Audio.unlock();
-        apply(collect(e));
+        const st = this.stick;
+
+        // a touch that begins inside the movement zone claims the stick and
+        // keeps it until it lifts, wherever it wanders — otherwise a thumb
+        // dragged across the middle would start pressing the action buttons
+        if (e.type === 'touchstart') {
+          for (const t of e.changedTouches || []) {
+            if (st.id === null && inZone(t.clientX, t.clientY)) {
+              st.id = t.identifier;
+              st.ox = t.clientX;
+              st.oy = t.clientY;
+              st.dx = 0;
+              st.dy = 0;
+            }
+          }
+        }
+
+        let held = null;
+        const others = [];
+        for (const t of e.touches) {
+          if (st.id !== null && t.identifier === st.id) held = t;
+          else others.push({ x: t.clientX, y: t.clientY });
+        }
+        if (held) this.moveStick(held.clientX, held.clientY);
+        else this.releaseStick();
+        apply(others);
       };
 
       const layer = document.getElementById('touch') || document;
@@ -157,6 +243,20 @@
     press(a) {
       this.now[a] = true;
       this.latch[a] = true;
+    },
+
+    /** Drop everything held. Called when the game changes screens: a thumb
+        still down when a menu opens must not keep steering behind it, and the
+        tap that opened the menu must not leak into the next run. */
+    clear() {
+      this.now = Object.create(null);
+      this.prev = Object.create(null);
+      this.latch = Object.create(null);
+      this.stick.id = null;
+      this.stick.dx = 0;
+      this.stick.dy = 0;
+      this.paintStick(false);
+      if (this.pads) for (const el of this.pads) el.classList.remove('down');
     },
 
     /** Call once per frame, after the frame has consumed the state. */

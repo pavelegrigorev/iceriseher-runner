@@ -1,13 +1,22 @@
-/* İçərişəhər Runner — the local table of records.
+/* İçərişəhər Runner — the local tables of records.
 
    No backend and no dependencies, so the leaderboard is whatever this browser
-   remembers: a top-10 list in localStorage, each row tied to a nickname the
-   player types once and keeps. The module owns both the data and the markup
-   that shows it, so the two cannot drift apart. */
+   remembers: top-10 lists in localStorage, each row tied to a nickname the
+   player types once and keeps.
+
+   There are two lists because the city rotates daily (see U.seed). Comparing
+   today's run against one from last week compares two different cities, so
+   «сегодня» is the honest ranking and «всё время» is the trophy cabinet. The
+   day list is thrown away when the calendar day turns.
+
+   The module owns both the data and the markup that shows it, so the two
+   cannot drift apart. */
 (function (ICH) {
   'use strict';
+  const U = ICH.U;
 
-  const KEY = 'icherisheher.scores';
+  const ALL_KEY = 'icherisheher.scores';
+  const DAY_KEY = 'icherisheher.today';
   const NICK_KEY = 'icherisheher.nick';
   const LEGACY_KEY = 'icherisheher.best'; // all the older build kept: one number
   const SIZE = 10;
@@ -35,6 +44,8 @@
       .slice(0, NICK_MAX);
   }
 
+  const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
   /** Anything coming out of storage may be from an older build, hand-edited or
       plain corrupt, so every row is rebuilt rather than trusted. */
   function clean(row) {
@@ -48,8 +59,30 @@
       kills: int(row.kills),
       coins: int(row.coins),
       combo: Math.max(1, int(row.combo)),
-      ts: int(row.ts),
+      day: DAY_RE.test(row.day) ? row.day : '',
     };
+  }
+
+  function parseList(raw) {
+    let list = [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed.map(clean);
+    } catch (e) { list = []; }
+    list = list.filter(Boolean);
+    list.sort((a, b) => b.score - a.score); // the stored order is not trusted either
+    list.length = Math.min(list.length, SIZE);
+    return list;
+  }
+
+  /** Place a run in a sorted list. Ties do not displace the older row. */
+  function insert(list, entry) {
+    let i = 0;
+    while (i < list.length && list[i].score >= entry.score) i++;
+    if (i >= SIZE) return -1;
+    list.splice(i, 0, entry);
+    list.length = Math.min(list.length, SIZE);
+    return i;
   }
 
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
@@ -61,75 +94,99 @@
   const Scores = {
     size: SIZE,
     nickMax: NICK_MAX,
-    list: null,
+    guest: NO_NICK,
+    all: null,
+    day: null,
+    dayOf: '', // which calendar day the day list belongs to
     nick: null,
 
-    /** The table, best first. Cached: storage is read once per session. */
-    load() {
-      if (this.list) return this.list;
-      const raw = get(KEY);
-      let list = [];
+    /** All-time top ten, best first. Cached: storage is read once per session. */
+    loadAll() {
+      if (this.all) return this.all;
+      const raw = get(ALL_KEY);
       if (raw === null) {
-        // migrate the single number the previous build stored, so nobody
-        // loses a record to the upgrade
+        // migrate the single number the previous build stored, so nobody loses
+        // a record to the upgrade
         const legacy = int(get(LEGACY_KEY));
-        if (legacy > 0) list = [clean({ nick: NO_NICK, score: legacy })];
+        this.all = legacy > 0 ? [clean({ nick: NO_NICK, score: legacy })] : [];
       } else {
-        try {
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) list = parsed.map(clean);
-        } catch (e) { list = []; }
+        this.all = parseList(raw);
       }
-      list = list.filter(Boolean);
-      list.sort((a, b) => b.score - a.score); // the stored order is not trusted either
-      list.length = Math.min(list.length, SIZE);
-      this.list = list;
+      return this.all;
+    },
+
+    /** Today's top ten. A stored list from an earlier date is dropped: it
+        ranks runs through a city that no longer exists. */
+    loadDay(today) {
+      const now = today || U.today();
+      if (this.day && this.dayOf === now) return this.day;
+      let list = [];
+      const raw = get(DAY_KEY);
+      if (raw !== null) {
+        let box = null;
+        try { box = JSON.parse(raw); } catch (e) { box = null; }
+        if (box && box.day === now) list = parseList(JSON.stringify(box.rows || []));
+      }
+      this.day = list;
+      this.dayOf = now;
       return list;
     },
 
+    list(which) {
+      return which === 'day' ? this.loadDay() : this.loadAll();
+    },
+
     save() {
-      put(KEY, JSON.stringify(this.load()));
+      put(ALL_KEY, JSON.stringify(this.loadAll()));
+      put(DAY_KEY, JSON.stringify({ day: this.dayOf, rows: this.loadDay() }));
     },
 
     best() {
-      const list = this.load();
+      const list = this.loadAll();
       return list.length ? list[0].score : 0;
     },
 
-    /** Would this run make the table? Ties do not displace the older row. */
-    qualifies(score) {
+    /** Would this run make a table? Ties do not displace the older row. */
+    qualifies(score, which) {
       const s = int(score);
-      const list = this.load();
+      const list = this.list(which);
       return s > 0 && (list.length < SIZE || s > list[SIZE - 1].score);
     },
 
-    /** Insert a finished run. Returns its place (0-based) or -1 if it missed. */
+    /** File a finished run in both tables. Returns the places it took, -1 for
+        a table it missed. */
     add(row) {
-      const entry = clean(row);
-      if (!entry) return -1;
-      const list = this.load();
-      let i = 0;
-      while (i < list.length && list[i].score >= entry.score) i++;
-      if (i >= SIZE) return -1;
-      list.splice(i, 0, entry);
-      list.length = Math.min(list.length, SIZE);
+      const today = U.today();
+      const entry = clean(Object.assign({ day: today }, row));
+      if (!entry) return { all: -1, day: -1 };
+      this.loadAll();
+      this.loadDay(today);
+      const places = {
+        all: insert(this.all, entry),
+        // the same object in both lists on purpose: renaming touches one row
+        day: entry.day === this.dayOf ? insert(this.day, entry) : -1,
+      };
       this.save();
-      return i;
+      return places;
     },
 
-    /** Re-sign a row while its nickname is still being typed. */
-    rename(i, nick) {
-      const list = this.load();
-      if (i < 0 || i >= list.length) return;
-      list[i].nick = normNick(nick) || NO_NICK;
+    /** Re-sign a row while its nickname is still being typed. Both tables hold
+        the same object, so one write covers them. */
+    rename(places, nick) {
+      const name = normNick(nick) || NO_NICK;
+      const at = (list, i) => { if (i >= 0 && i < list.length) list[i].nick = name; };
+      at(this.loadAll(), places && places.all);
+      at(this.loadDay(), places && places.day);
       this.save();
     },
 
     clear() {
-      this.list = [];
-      // an empty list, not a missing key: leaving the key absent would let the
+      this.all = [];
+      this.day = [];
+      this.dayOf = U.today();
+      // empty lists, not missing keys: leaving ALL_KEY absent would let the
       // legacy record rise from the dead on the next load
-      put(KEY, '[]');
+      this.save();
     },
 
     /** The name this player signs runs with. Empty until they type one. */
@@ -144,10 +201,14 @@
       return this.nick;
     },
 
-    /** The table as markup. `mark` highlights one place, -1 for none. */
-    tableHTML(mark) {
-      const list = this.load();
-      if (!list.length) return '<p class="board-empty">Пока пусто — сыграй партию.</p>';
+    /** A table as markup. `mark` highlights one place, -1 for none. */
+    tableHTML(which, mark) {
+      const list = this.list(which);
+      if (!list.length) {
+        return '<p class="board-empty">'
+          + (which === 'day' ? 'Сегодня ещё никто не бегал.' : 'Пока пусто — сыграй партию.')
+          + '</p>';
+      }
       const rows = list.map((r, i) => '<tr' + (i === mark ? ' class="me"' : '') + '>'
         + '<td class="rank">' + (i + 1) + '</td>'
         + '<td class="nick">' + esc(r.nick) + '</td>'

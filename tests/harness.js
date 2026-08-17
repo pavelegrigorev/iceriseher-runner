@@ -144,6 +144,9 @@ function boot(opts) {
     const p = padPos[el.dataset.btn] || [0, 0];
     el._rect = { left: p[0], top: p[1], width: 62, height: 62 };
   });
+  // the movement zone, laid out as the stylesheet does: the left 46%
+  const stickEl = elements.get('stick');
+  if (stickEl) stickEl._rect = { left: 0, top: 0, width: Math.round(width * 0.46), height };
 
   const canvas = makeElement('game');
   canvas.width = width;
@@ -152,8 +155,10 @@ function boot(opts) {
   elements.set('game', canvas);
 
   const body = makeElement('body');
+  const docHandlers = Object.create(null);
   const documentEl = {
     body,
+    hidden: false,
     getElementById: (id) => elements.get(id) || null,
     querySelectorAll(sel) {
       if (sel === '[data-btn]') return pads;
@@ -161,7 +166,12 @@ function boot(opts) {
       return [];
     },
     querySelector: () => null,
-    addEventListener() {},
+    addEventListener(type, fn) { (docHandlers[type] = docHandlers[type] || []).push(fn); },
+    removeEventListener(type, fn) {
+      const a = docHandlers[type] || [];
+      const i = a.indexOf(fn);
+      if (i >= 0) a.splice(i, 1);
+    },
     createElement: () => makeElement(),
   };
 
@@ -184,7 +194,9 @@ function boot(opts) {
       setItem: (k, v) => store.set(k, String(v)),
       removeItem: (k) => store.delete(k),
     },
-    requestAnimationFrame: (fn) => { raf.push(fn); return raf.length; },
+    // only the pending callback matters; the loop reschedules itself every
+    // frame and a growing list would just be a leak in a long test
+    requestAnimationFrame: (fn) => { raf.length = 0; raf.push(fn); return 1; },
     matchMedia: () => ({ matches: !!opts.touch }),
     innerWidth: width,
     innerHeight: height,
@@ -211,6 +223,12 @@ function boot(opts) {
   const ICH = sandbox.window.ICH;
   ICH.Game.init();
 
+  // count repaints, so a test can tell that a frame which simulated nothing
+  // also drew nothing
+  record.draws = 0;
+  const realDraw = ICH.Game.draw.bind(ICH.Game);
+  ICH.Game.draw = function () { record.draws++; realDraw(); };
+
   const api = {
     ICH, sandbox, record, pads, elements, canvas,
     /** What this browser would have remembered after the run so far. */
@@ -235,6 +253,28 @@ function boot(opts) {
       }
     },
     draw() { ICH.Game.draw(); },
+    /** Drive the real rAF loop at a given refresh rate, so anything that
+        depends on frame timing is visible to a test. `step()` bypasses the
+        loop and always simulates 1/60, which hides exactly that. */
+    frames(hz, seconds, before) {
+      const ms = 1000 / hz;
+      const n = Math.round(seconds * hz);
+      for (let i = 0; i < n; i++) {
+        if (before) before(i);
+        api._ts += ms;
+        ICH.Game.loop(api._ts);
+      }
+      return api;
+    },
+    _ts: 0,
+    /** How many times the loop actually repainted. */
+    draws: () => record.draws,
+    /** Send the tab to the background and bring it back. */
+    visibility(hidden) {
+      documentEl.hidden = !!hidden;
+      for (const fn of (docHandlers.visibilitychange || []).slice()) fn({ type: 'visibilitychange' });
+      return api;
+    },
     resize(w, h) {
       sandbox.innerWidth = w;
       sandbox.innerHeight = h;
@@ -242,10 +282,19 @@ function boot(opts) {
       canvas.height = h;
       ICH.Game.resize();
     },
-    /** Fire a touch event carrying the given screen points. */
+    /** Where a thumb would land in the movement zone. */
+    stickCenter() {
+      const r = elements.get('stick')._rect;
+      return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height * 0.7)];
+    },
+    /** Fire a touch event carrying the given screen points. A point is
+        [x, y] or [x, y, id]; the id keeps a finger identifiable across
+        events, which is what the stick tracks. */
     touch(type, points) {
       const layer = elements.get('touch');
-      const touches = points.map((p, i) => ({ identifier: i, clientX: p[0], clientY: p[1] }));
+      const touches = points.map((p, i) => ({
+        identifier: p.length > 2 ? p[2] : i, clientX: p[0], clientY: p[1],
+      }));
       layer.dispatchEvent({
         type, touches, targetTouches: touches, changedTouches: touches,
         cancelable: true, preventDefault() {},
@@ -267,6 +316,7 @@ function boot(opts) {
     },
     badDraws: () => record.bad,
   };
+  api._ts = ICH.Game.last;
   return api;
 }
 

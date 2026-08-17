@@ -41,11 +41,36 @@ window.ICH = window.ICH || {};
     };
   };
 
+  /* The whole city — street, props, enemies, backdrop — is generated from this
+     hash and nothing else, so it used to be the same city on every run for
+     everybody. Folding a seed in turns that into a strength: one number picks
+     a city, and a city can be picked per day. Constant within a run, so cells
+     still regenerate identically when you walk back. */
+  U.seed = 0;
+
   /** Stable 2d hash — lets background cells regenerate identically forever. */
   U.hash = function (a, b) {
-    let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0;
+    let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)
+      + Math.imul(U.seed | 0, 2246822519)) | 0;
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     return (h ^ (h >>> 16)) >>> 0;
+  };
+
+  /** Local calendar day, the unit the city rotates on. Local rather than UTC:
+      "today" should mean the player's today. */
+  U.today = function (d) {
+    d = d || new Date();
+    const p = (n) => (n < 10 ? '0' : '') + n;
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  };
+
+  /** Which city a given day gets. Everyone playing on the same date runs the
+      same İçərişəhər. */
+  U.daySeed = function (day) {
+    const s = String(day);
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    return ((h ^ (h >>> 15)) >>> 0) || 1;
   };
 
   /* ---- colour helpers, used to cross-fade the palette between zones ---- */
@@ -183,6 +208,15 @@ window.ICH = window.ICH || {};
     DJUMP_VEL: -615,
     COYOTE: 0.1,
     JUMP_BUFFER: 0.13,
+    SLASH_BUFFER: 0.18, // longer than the jump's: the swing costs 0.3 s to clear
+    NUDGE: 9, // how far a jump may be shifted sideways to slip past a ledge corner
+
+    /* The stick is deliberately short-throw. Past STICK_MAX the origin follows
+       the thumb, so reversing costs STICK_MAX + STICK_DEAD of travel — keep
+       that sum inside a thumb flick, or turning round mid-run feels like
+       wading. 26 px measures about 4 mm on a phone. */
+    STICK_DEAD: 10, // px of thumb travel before the stick reads as a direction
+    STICK_MAX: 16, // past this the origin follows, so a pull back always lands
     GLIDE_FALL: 130,
 
     CAM_LEAD: 340, // how far behind the runner the camera sits
@@ -192,5 +226,13 @@ window.ICH = window.ICH || {};
     MAX_HEALTH: 5,
     MAX_AMMO: 9,
     COMBO_TIME: 3.2,
+
+    /* The simulation runs on its own clock, not the display's. Gravity is
+       integrated, so a frame-sized step made the jump 106 px tall at 30 Hz and
+       116 px at 144 Hz — a different game per monitor, and an unfair table.
+       60 Hz is the step because it is what the game was tuned at and because
+       it costs a phone exactly one update per frame. */
+    STEP: 1 / 60,
+    MAX_STEPS: 5, // catch-up ceiling; beyond it the backlog is dropped
   };
 })(window.ICH);

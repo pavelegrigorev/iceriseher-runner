@@ -24,6 +24,8 @@
     return many;
   }
 
+  const HELP = ['keys', 'city', 'around'];
+
   /* Street furniture that belongs behind the masonry rather than in front. */
   const BEHIND = {
     rug: 1, lamp: 1, door: 1, plaque: 1, loom: 1, copper: 1,
@@ -52,7 +54,9 @@
     coins: 0,
     kills: 0,
     best: 0,
-    rank: -1, // place in the record table for the run just finished, -1 if none
+    places: null, // where the finished run landed in each table, -1 for missed
+    lastRun: null, // the finished run, kept for the share card
+    board: 'day', // which table the player is looking at
     health: C.MAX_HEALTH,
     ammo: 3,
     combo: 1,
@@ -65,6 +69,7 @@
     dyingT: 0,
     acc: 0,
     last: 0,
+    dirty: true, // the canvas needs a repaint even though nothing simulated
 
     /* ------------------------------------------------------------- setup */
     init() {
@@ -90,6 +95,19 @@
       window.addEventListener('pointerdown', wake, { once: true });
       window.addEventListener('blur', () => {
         if (this.state === 'playing') this.pause();
+      });
+      /* A phone suspends the audio context when the tab goes to the background
+         and does not resume it on the way back. The unlock listeners above are
+         one-shot, so without this you come back from a notification to a silent
+         game and no way to fix it short of a reload. */
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          // not a silent pause: the player must come back to a way out
+          if (this.state === 'playing') this.pause();
+        } else {
+          Audio.unlock();
+          this.dirty = true;
+        }
       });
 
       this.bindUI();
@@ -132,6 +150,7 @@
       C.HUD = ch < 420 ? 1.45 : ch < 560 ? 1.22 : 1;
 
       this._vig = null;
+      this.dirty = true;
 
       this.portrait = C.touch && ah > aw * 1.05;
       document.body.classList.toggle('portrait', !!this.portrait);
@@ -164,16 +183,22 @@
         if (el) el.addEventListener('click', (e) => { e.preventDefault(); Audio.unlock(); Audio.play('ui'); fn(); });
       };
       on('btn-start', () => this.start());
-      on('btn-help', () => this.show('screen-help'));
+      on('btn-help', () => { this.pickHelp('keys'); this.show('screen-help'); });
+      HELP.forEach((k) => on('help-tab-' + k, () => this.pickHelp(k)));
       on('btn-help-back', () => this.show('screen-title'));
-      on('btn-scores', () => { this.renderBoard('scores-board', -1); this.show('screen-scores'); });
+      on('btn-scores', () => { this.pickBoard('scores', this.board); this.show('screen-scores'); });
       on('btn-scores-back', () => this.show('screen-title'));
       on('btn-scores-clear', () => {
-        if (typeof confirm === 'function' && !confirm('Стереть таблицу рекордов?')) return;
+        if (typeof confirm === 'function' && !confirm('Стереть таблицы рекордов?')) return;
         Scores.clear();
         this.best = 0;
-        this.renderBoard('scores-board', -1);
+        this.pickBoard('scores', this.board);
       });
+      on('btn-share', () => this.share());
+      on('over-tab-day', () => this.pickBoard('over', 'day'));
+      on('over-tab-all', () => this.pickBoard('over', 'all'));
+      on('scores-tab-day', () => this.pickBoard('scores', 'day'));
+      on('scores-tab-all', () => this.pickBoard('scores', 'all'));
       on('btn-resume', () => this.resume());
       on('btn-retry', () => this.start());
       on('btn-retry2', () => this.start());
@@ -191,18 +216,60 @@
       if (nick) {
         nick.addEventListener('input', () => {
           Scores.setNick(nick.value);
-          if (this.rank >= 0) {
-            Scores.rename(this.rank, nick.value);
-            this.renderBoard('over-board', this.rank);
+          if (this.lastRun) this.lastRun.nick = Scores.loadNick();
+          if (this.places) {
+            Scores.rename(this.places, nick.value);
+            this.renderBoard('over-board', this.board, this.places[this.board]);
           }
         });
       }
     },
 
-    renderBoard(id, mark) {
+    /** Show one pane of the help. Three short panes beat one long scroll on a
+        phone, where the whole page used to be a minute of thumbing. */
+    pickHelp(which) {
+      for (const k of HELP) {
+        const tab = document.getElementById('help-tab-' + k);
+        const pane = document.getElementById('help-' + k);
+        if (tab) tab.classList.toggle('on', k === which);
+        if (pane) pane.classList.toggle('hidden', k !== which);
+      }
+    },
+
+    /** Hand the finished run to the OS share sheet, or to the clipboard where
+        there is none. The button says what actually happened, because on a
+        phone the sheet may be dismissed and silence would read as a bug. */
+    share() {
+      const btn = document.getElementById('btn-share');
+      const say = (s) => { if (btn) btn.textContent = s; };
+      if (!this.lastRun || !ICH.Share) return;
+      say('…');
+      ICH.Share.run(this.lastRun, (how) => {
+        say(how === 'copied' ? 'Скопировано' : how === 'failed' ? 'Не вышло' : 'Поделиться');
+        if (how === 'copied' || how === 'failed') {
+          setTimeout(() => say('Поделиться'), 1800);
+        }
+      });
+    },
+
+    /** Switch one screen's table between «сегодня» and «всё время». The choice
+        is shared: pick a view once and both screens keep it. */
+    pickBoard(prefix, which) {
+      this.board = which === 'all' ? 'all' : 'day';
+      const on = (id, state) => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('on', state);
+      };
+      on(prefix + '-tab-day', this.board === 'day');
+      on(prefix + '-tab-all', this.board === 'all');
+      const mark = prefix === 'over' && this.places ? this.places[this.board] : -1;
+      this.renderBoard(prefix + '-board', this.board, mark);
+    },
+
+    renderBoard(id, which, mark) {
       const el = document.getElementById(id);
       if (!el) return;
-      el.innerHTML = Scores.tableHTML(mark);
+      el.innerHTML = Scores.tableHTML(which, mark);
       // The table scrolls when the screen is short, and the row worth reading
       // is the one just earned. Measured in client rects, not offsetTop: the
       // offsetParent of a <tr> is its own table, so the two would be counted
@@ -221,16 +288,29 @@
         if (s.id !== 'screen-rotate') s.classList.toggle('hidden', s.id !== id);
       });
       document.body.classList.toggle('in-game', id === null || id === '');
+      ICH.Input.clear();
+      this.dirty = true; // a frozen world still needs one repaint behind the menu
     },
 
     hideScreens() {
       document.querySelectorAll('.screen').forEach((s) => {
         if (s.id !== 'screen-rotate') s.classList.add('hidden');
       });
+      // the touch layer sits above the menus, so it is only laid out in game —
+      // otherwise the movement zone swallows taps meant for the left-hand
+      // half of a menu, «Ещё раз» included
+      document.body.classList.add('in-game');
+      ICH.Input.clear();
+      this.dirty = true;
     },
 
     /* -------------------------------------------------------------- flow */
     newRun() {
+      // Pick today's city before anything is generated. The seed feeds U.hash,
+      // which is the only source the street and the backdrop draw on, so this
+      // one line rotates the whole city — and everyone playing on this date
+      // runs the same one.
+      U.seed = U.daySeed(U.today());
       Level.reset();
       Backdrop.reset();
       FX.reset();
@@ -250,7 +330,7 @@
       this.score = 0;
       this.coins = 0;
       this.kills = 0;
-      this.rank = -1;
+      this.places = null;
       this.health = C.MAX_HEALTH;
       this.ammo = 3;
       this.combo = 1;
@@ -331,6 +411,7 @@
       this.combo = 1;
       this.comboT = 0;
       FX.shake(9, 0.34);
+      FX.buzz(35);
       FX.flash('rgba(200,40,46,0.55)', 0.5);
       FX.burst(p.x + p.w / 2, p.y + p.h / 2, 12, { color: ['#ff8a6a', '#c8262e'], speedMax: 260, kind: 'spark' });
       Audio.play('hurt');
@@ -347,6 +428,7 @@
       this.state = 'dying';
       this.dyingT = 0;
       FX.shake(12, 0.5);
+      FX.buzz([40, 70, 110]);
       FX.slowmo(0.9, 0.35);
       Audio.play('die');
       Audio.stopMusic();
@@ -364,8 +446,10 @@
         kills: this.kills,
         coins: this.coins,
         combo: this.comboMax,
+        day: U.today(),
       };
-      this.rank = Scores.add(run);
+      this.lastRun = run;
+      this.places = Scores.add(run);
       this.best = Scores.best();
       // shown before it is filled: a hidden plate has no layout, and the table
       // cannot scroll to the row just earned without one
@@ -382,17 +466,23 @@
         run.coins + ' золота',
         'комбо ×' + run.combo,
       ].join(' · '));
-      text('over-place-label', this.rank === 0
-        ? 'Первое место — подпишись'
-        : this.rank + 1 + '-е место в таблице — подпишись');
+      // the day table is the one worth bragging about — it ranks runs through
+      // the same city — so the label reads from it and falls back to all-time
+      const p = this.places;
+      const onDay = p.day >= 0;
+      const at = onDay ? p.day : p.all;
+      const where = onDay ? 'сегодня' : 'за всё время';
+      text('over-place-label', at === 0
+        ? 'Первое место ' + where + ' — подпишись'
+        : at + 1 + '-е место ' + where + ' — подпишись');
 
       const place = document.getElementById('over-place');
-      if (place) place.classList.toggle('hidden', this.rank < 0);
+      if (place) place.classList.toggle('hidden', at < 0);
       const nick = document.getElementById('over-nick');
       // no autofocus: on a phone that throws the on-screen keyboard over a
       // fullscreen landscape game the moment you die
       if (nick) nick.value = Scores.loadNick();
-      this.renderBoard('over-board', this.rank);
+      this.pickBoard('over', onDay || p.all < 0 ? 'day' : 'all');
     },
 
     /** Falling into a pit costs a heart and drops you back onto the street. */
@@ -1238,11 +1328,36 @@
       let dt = (ts - this.last) / 1000;
       this.last = ts;
       if (!isFinite(dt) || dt < 0) dt = 0;
-      dt = Math.min(dt, 1 / 30);
+      dt = Math.min(dt, C.STEP * C.MAX_STEPS);
 
-      this.update(dt);
-      ICH.Input.endFrame();
-      this.draw();
+      /* A 60 Hz display and a 60 Hz step drift against each other by
+         microseconds. Left alone that means an occasional frame with no step
+         followed by one with two — which reads as a stutter even though the
+         maths is right. Snapping a near-exact frame to a whole number of steps
+         removes the drift without touching the general case. */
+      const whole = Math.round(dt / C.STEP);
+      if (whole > 0 && Math.abs(dt - whole * C.STEP) < 0.002) dt = whole * C.STEP;
+
+      this.acc += dt;
+      let steps = 0;
+      while (this.acc >= C.STEP && steps < C.MAX_STEPS) {
+        this.update(C.STEP);
+        ICH.Input.endFrame();
+        this.acc -= C.STEP;
+        steps++;
+      }
+      // a tab that was asleep comes back with seconds of backlog: drop it
+      // rather than fast-forward the runner into the first pit
+      if (steps === C.MAX_STEPS) this.acc = 0;
+
+      /* Drawing is the expensive half on a phone, and a frame that simulated
+         nothing looks exactly like the one before it. On a 120 Hz screen this
+         halves the work; while paused the world is frozen, so one draw covers
+         the whole pause. */
+      if ((steps > 0 && this.state !== 'paused') || this.dirty) {
+        this.draw();
+        this.dirty = false;
+      }
     },
   };
 

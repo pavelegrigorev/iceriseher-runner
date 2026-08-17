@@ -104,6 +104,17 @@
       this.timeScale = scale || 0.35;
     },
 
+    /* The fourth feedback channel, after particles, shake and sound: on a phone
+       a hit you can feel lands harder than one you only see. Kept for the few
+       moments that matter — a buzz on every kill would be constant noise and a
+       flat battery. Muting the game mutes this too; it is the same switch for
+       "stop shouting at me". Absent on iOS Safari, hence the guard. */
+    buzz(pattern) {
+      if (ICH.Audio && ICH.Audio.muted) return;
+      if (typeof navigator === 'undefined' || !navigator.vibrate) return;
+      try { navigator.vibrate(pattern); } catch (e) { /* a blocked call is fine */ }
+    },
+
     update(dt) {
       if (this._slowT > 0) {
         this._slowT -= dt;

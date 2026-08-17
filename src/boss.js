@@ -1255,6 +1255,7 @@
       b.invulT = 0.12;
       Audio.play('kill');
       FX.shake(4, 0.16);
+      FX.buzz(b.core ? 22 : 10); // a hit into the open core should feel bigger
       FX.burst(b.x + b.w / 2, b.y + b.h / 2, 10, {
         color: ['#fff0bd', '#ff9a6a'], speedMax: 220, kind: 'spark',
       });

@@ -7,9 +7,9 @@
       "runtimeArgs": [
         "-m",
         "http.server",
-        "5193"
+        "5220"
       ],
-      "port": 5193
+      "port": 5220
     }
   ]
 }
