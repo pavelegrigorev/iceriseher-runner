@@ -27,6 +27,7 @@
         <p class="sub">Бесконечная беготня по крышам и базарам Старого города Баку</p>
         <div class="row">
           <button id="btn-start" class="btn primary">Играть</button>
+          <button id="btn-scores" class="btn">Рекорды</button>
           <button id="btn-help" class="btn">Как играть</button>
         </div>
         <p class="hint">или нажми <kbd>Пробел</kbd></p>
@@ -65,6 +66,7 @@
           <li><b>Стрелу можно отбить саблей</b> — за это дают очки.</li>
           <li><b>Гранат</b> — снаряд, <b>армуду с чаем</b> — жизнь, <b>синий камень</b> и <b>шафран</b> — очки, <b>пахлава</b> — сладкие очки, <b>ковёр-самолёт</b> — планирование и магнит на 10 секунд.</li>
           <li>Убийства подряд копят <b>комбо</b> — множитель на всё.</li>
+          <li>Итог забега — одни <b>очки</b>: в них уже сложены метры, побеждённые, трофеи и комбо. Десять лучших забегов попадают в <b>таблицу рекордов</b>; подпишись, и результат останется за твоим именем.</li>
           <li>Кувшины разбиваются и сыплют золото. Голуби разлетаются, если пробежать сквозь стаю.</li>
         </ul>
         <button id="btn-help-back" class="btn">Назад</button>
@@ -90,17 +92,31 @@
         <div class="ornament">۞</div>
         <h2>Oyun bitdi</h2>
         <p class="sub">Игра окончена</p>
-        <div class="stats">
-          <div><span>Очки</span><b id="over-score">0</b></div>
-          <div><span>Дистанция</span><b id="over-dist">0 m</b></div>
-          <div><span>Золото</span><b id="over-coins">0</b></div>
-          <div><span>Побеждено</span><b id="over-kills">0</b></div>
-          <div><span>Рекорд</span><b id="over-best">0</b></div>
+        <div class="final"><b id="over-score">0</b><span>очков</span></div>
+        <p class="details" id="over-details"></p>
+        <div class="place hidden" id="over-place">
+          <label for="over-nick" id="over-place-label">Ты в таблице — подпишись</label>
+          <input id="over-nick" type="text" maxlength="12" autocomplete="off"
+                 autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Qonaq">
         </div>
-        <p class="newbest hidden" id="over-newbest">★ Новый рекорд! ★</p>
+        <div class="board" id="over-board"></div>
         <div class="row">
           <button id="btn-retry2" class="btn primary">Ещё раз</button>
           <button id="btn-menu2" class="btn">В меню</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------------ records -->
+    <div class="screen hidden" id="screen-scores">
+      <div class="plate">
+        <div class="ornament">۞</div>
+        <h2>Рекорды</h2>
+        <p class="sub">Десять лучших забегов этого браузера.</p>
+        <div class="board" id="scores-board"></div>
+        <div class="row">
+          <button id="btn-scores-back" class="btn primary">Назад</button>
+          <button id="btn-scores-clear" class="btn">Очистить</button>
         </div>
       </div>
     </div>
@@ -141,6 +157,7 @@
 </div>
 
 <script src="src/core.js"></script>
+<script src="src/scores.js"></script>
 <script src="src/zones.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/input.js"></script>

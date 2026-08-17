@@ -26,6 +26,7 @@ function markup() {
     ids: [...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]),
     buttons: [...html.matchAll(/data-btn="([^"]+)"/g)].map((m) => m[1]),
     screens: [...html.matchAll(/class="screen[^"]*"\s+id="([^"]+)"/g)].map((m) => m[1]),
+    inputs: [...html.matchAll(/<input[^>]*\bid="([^"]+)"/g)].map((m) => m[1]),
   };
 }
 
@@ -72,13 +73,16 @@ function makeCtx2d(record) {
   });
 }
 
-function makeElement(id, cls) {
+function makeElement(id, cls, tag) {
   const classes = new Set((cls || '').split(/\s+/).filter(Boolean));
   const el = {
     id: id || '',
+    tagName: (tag || 'div').toUpperCase(),
     dataset: {},
     style: {},
     textContent: '',
+    innerHTML: '',
+    value: '',
     _rect: { left: 0, top: 0, width: 0, height: 0 },
     _handlers: {},
     classList: {
@@ -122,7 +126,8 @@ function boot(opts) {
 
   const elements = new Map();
   for (const id of m.ids) {
-    elements.set(id, makeElement(id, m.screens.includes(id) ? 'screen' : ''));
+    const cls = m.screens.includes(id) ? 'screen' : '';
+    elements.set(id, makeElement(id, cls, m.inputs.includes(id) ? 'input' : 'div'));
   }
   const pads = m.buttons.map((name) => {
     const el = makeElement('', 'tbtn');
@@ -160,8 +165,13 @@ function boot(opts) {
     createElement: () => makeElement(),
   };
 
-  const store = new Map();
+  // seeded before the scripts run, so a test can boot into a browser that
+  // already remembers something
+  const store = new Map(Object.entries(opts.storage || {}).map(([k, v]) => [k, String(v)]));
   const raf = [];
+  // Window listeners are kept rather than dropped: the keyboard is bound there,
+  // and a test that cannot deliver a keystroke cannot check what it does.
+  const winHandlers = Object.create(null);
   const sandbox = {
     console,
     setTimeout, clearTimeout, setInterval: () => 0, clearInterval() {},
@@ -172,13 +182,20 @@ function boot(opts) {
     localStorage: {
       getItem: (k) => (store.has(k) ? store.get(k) : null),
       setItem: (k, v) => store.set(k, String(v)),
+      removeItem: (k) => store.delete(k),
     },
     requestAnimationFrame: (fn) => { raf.push(fn); return raf.length; },
     matchMedia: () => ({ matches: !!opts.touch }),
     innerWidth: width,
     innerHeight: height,
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type, fn, o) {
+      (winHandlers[type] = winHandlers[type] || []).push({ fn, once: !!(o && o.once) });
+    },
+    removeEventListener(type, fn) {
+      const a = winHandlers[type] || [];
+      const i = a.findIndex((h) => h.fn === fn);
+      if (i >= 0) a.splice(i, 1);
+    },
     Touch: function Touch(o) { Object.assign(this, o); },
     TouchEvent: function TouchEvent(type, o) { Object.assign(this, o, { type }); },
   };
@@ -196,6 +213,18 @@ function boot(opts) {
 
   const api = {
     ICH, sandbox, record, pads, elements, canvas,
+    /** What this browser would have remembered after the run so far. */
+    stored: (k) => (store.has(k) ? store.get(k) : null),
+    /** Deliver a key event the way the browser does — through the window, from
+        whichever element has focus. */
+    key(type, code, target) {
+      const ev = { type, code, target: target || body, repeat: false, preventDefault() {} };
+      for (const h of (winHandlers[type] || []).slice()) {
+        h.fn(ev);
+        if (h.once) sandbox.removeEventListener(type, h.fn);
+      }
+      return ev;
+    },
     /** Advance the simulation without touching the real clock. */
     step(frames, before) {
       for (let i = 0; i < (frames || 1); i++) {

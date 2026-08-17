@@ -11,9 +11,18 @@
   const Backdrop = ICH.Backdrop;
   const Ent = ICH.Ent;
   const Boss = ICH.Boss;
+  const Scores = ICH.Scores;
   const buta = (ctx, x, y, r, rot) => ICH.Art.buta(ctx, x, y, r, rot);
 
-  const BEST_KEY = 'icherisheher.best';
+  /** Russian counts: 1 враг, 2 врага, 5 врагов. */
+  function plural(n, one, few, many) {
+    const a = Math.abs(n) % 100;
+    const b = a % 10;
+    if (a > 10 && a < 20) return many;
+    if (b === 1) return one;
+    if (b > 1 && b < 5) return few;
+    return many;
+  }
 
   /* Street furniture that belongs behind the masonry rather than in front. */
   const BEHIND = {
@@ -43,9 +52,11 @@
     coins: 0,
     kills: 0,
     best: 0,
+    rank: -1, // place in the record table for the run just finished, -1 if none
     health: C.MAX_HEALTH,
     ammo: 3,
     combo: 1,
+    comboMax: 1,
     comboT: 0,
     comboPop: 0,
     healthPop: 0,
@@ -59,7 +70,8 @@
     init() {
       this.canvas = document.getElementById('game');
       this.ctx = this.canvas.getContext('2d', { alpha: false });
-      this.best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
+      this.best = Scores.best();
+      Scores.loadNick();
 
       FX.init();
       C.touch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0
@@ -154,6 +166,14 @@
       on('btn-start', () => this.start());
       on('btn-help', () => this.show('screen-help'));
       on('btn-help-back', () => this.show('screen-title'));
+      on('btn-scores', () => { this.renderBoard('scores-board', -1); this.show('screen-scores'); });
+      on('btn-scores-back', () => this.show('screen-title'));
+      on('btn-scores-clear', () => {
+        if (typeof confirm === 'function' && !confirm('Стереть таблицу рекордов?')) return;
+        Scores.clear();
+        this.best = 0;
+        this.renderBoard('scores-board', -1);
+      });
       on('btn-resume', () => this.resume());
       on('btn-retry', () => this.start());
       on('btn-retry2', () => this.start());
@@ -163,6 +183,37 @@
       on('btn-mute', () => this.toggleMute());
       on('btn-full', () => this.toggleFullscreen());
       on('btn-rotate-play', () => this.toggleFullscreen());
+
+      // The name is signed on the results screen and kept for the next run.
+      // The field sits outside the table so redrawing a row cannot steal focus
+      // mid-word.
+      const nick = document.getElementById('over-nick');
+      if (nick) {
+        nick.addEventListener('input', () => {
+          Scores.setNick(nick.value);
+          if (this.rank >= 0) {
+            Scores.rename(this.rank, nick.value);
+            this.renderBoard('over-board', this.rank);
+          }
+        });
+      }
+    },
+
+    renderBoard(id, mark) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = Scores.tableHTML(mark);
+      // The table scrolls when the screen is short, and the row worth reading
+      // is the one just earned. Measured in client rects, not offsetTop: the
+      // offsetParent of a <tr> is its own table, so the two would be counted
+      // from different origins. scrollIntoView is no good either — it drags
+      // every ancestor along with it.
+      const me = el.querySelector && el.querySelector('.me');
+      if (me && me.getBoundingClientRect) {
+        const row = me.getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        el.scrollTop += row.top - box.top - (box.height - row.height) / 2;
+      }
     },
 
     show(id) {
@@ -199,9 +250,11 @@
       this.score = 0;
       this.coins = 0;
       this.kills = 0;
+      this.rank = -1;
       this.health = C.MAX_HEALTH;
       this.ammo = 3;
       this.combo = 1;
+      this.comboMax = 1;
       this.comboT = 0;
       this.dyingT = 0;
       this.pushWarn = 0;
@@ -255,6 +308,7 @@
       this.comboT = C.COMBO_TIME;
       if (this.combo < 15) {
         this.combo++;
+        if (this.combo > this.comboMax) this.comboMax = this.combo;
         this.comboPop = 1;
         if (this.combo % 5 === 0) {
           FX.text(x, y - 26, 'ƏLA! ×' + this.combo, '#fff0bd', 18);
@@ -298,21 +352,47 @@
       Audio.stopMusic();
     },
 
+    /* One number is the result — metres, kills and loot are already folded into
+       it. The rest is shown as a single line of detail, and the table is what
+       gives the number meaning. */
     gameOver() {
       this.state = 'over';
-      const finalScore = Math.floor(this.score);
-      const isBest = finalScore > this.best;
-      if (isBest) {
-        this.best = finalScore;
-        localStorage.setItem(BEST_KEY, String(this.best));
-      }
-      document.getElementById('over-score').textContent = String(finalScore);
-      document.getElementById('over-dist').textContent = Math.floor(this.dist) + ' m';
-      document.getElementById('over-coins').textContent = String(this.coins);
-      document.getElementById('over-kills').textContent = String(this.kills);
-      document.getElementById('over-best').textContent = String(this.best);
-      document.getElementById('over-newbest').classList.toggle('hidden', !isBest);
+      const run = {
+        nick: Scores.loadNick(),
+        score: Math.floor(this.score),
+        dist: Math.floor(this.dist),
+        kills: this.kills,
+        coins: this.coins,
+        combo: this.comboMax,
+      };
+      this.rank = Scores.add(run);
+      this.best = Scores.best();
+      // shown before it is filled: a hidden plate has no layout, and the table
+      // cannot scroll to the row just earned without one
       this.show('screen-over');
+
+      const text = (id, s) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = s;
+      };
+      text('over-score', Scores.num(run.score));
+      text('over-details', [
+        run.dist + ' м',
+        run.kills + ' ' + plural(run.kills, 'враг', 'врага', 'врагов'),
+        run.coins + ' золота',
+        'комбо ×' + run.combo,
+      ].join(' · '));
+      text('over-place-label', this.rank === 0
+        ? 'Первое место — подпишись'
+        : this.rank + 1 + '-е место в таблице — подпишись');
+
+      const place = document.getElementById('over-place');
+      if (place) place.classList.toggle('hidden', this.rank < 0);
+      const nick = document.getElementById('over-nick');
+      // no autofocus: on a phone that throws the on-screen keyboard over a
+      // fullscreen landscape game the moment you die
+      if (nick) nick.value = Scores.loadNick();
+      this.renderBoard('over-board', this.rank);
     },
 
     /** Falling into a pit costs a heart and drops you back onto the street. */
@@ -343,7 +423,11 @@
       this.mutedFlash = Math.max(0, this.mutedFlash - dt);
 
       if (this.state === 'title') {
-        if (In.pressed('jump') || In.pressed('confirm')) this.start();
+        // the menu stays in this state behind the help and record screens, and
+        // a space bar there means "scroll", not "start"
+        const front = document.getElementById('screen-title');
+        const onTitle = !front || !front.classList.contains('hidden');
+        if (onTitle && (In.pressed('jump') || In.pressed('confirm'))) this.start();
         this.time += dt;
         this.pushX += 46 * dt;
         this.camX = this.pushX;

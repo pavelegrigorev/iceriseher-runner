@@ -64,17 +64,23 @@
       ctx.fillStyle = G.ammo > 0 ? P.ui : '#8d7f6a';
       ctx.fillText('×' + G.ammo, 46, 77);
 
-      /* ---------------------------------------------------------- score */
+      /* -----------------------------------------------------------------
+         Score, and nothing else. Metres, kills and loot all feed into this
+         one number, so showing them alongside it was showing the sum next to
+         its own terms. What is worth a second line is the record being
+         chased — and only once there is one. */
+      const chase = G.best > 0;
+      const beaten = chase && G.score > G.best;
       ctx.textAlign = 'right';
-      panel(ctx, W - 214, 12, 200, 66);
-      ctx.font = '700 26px "Trebuchet MS", system-ui, sans-serif';
+      panel(ctx, W - 178, 12, 164, chase ? 62 : 44);
+      ctx.font = '700 28px "Trebuchet MS", system-ui, sans-serif';
       ctx.fillStyle = P.gold;
-      ctx.fillText(String(Math.floor(G.score)).padStart(6, '0'), W - 26, 42);
-      ctx.font = '600 13px "Trebuchet MS", system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(246,231,196,0.8)';
-      ctx.fillText(Math.floor(G.dist) + ' m', W - 26, 62);
-      ctx.fillStyle = 'rgba(246,231,196,0.45)';
-      ctx.fillText('рекорд ' + G.best, W - 96, 62);
+      ctx.fillText(String(Math.floor(G.score)).padStart(6, '0'), W - 26, 44);
+      if (chase) {
+        ctx.font = '600 12px "Trebuchet MS", system-ui, sans-serif';
+        ctx.fillStyle = beaten ? P.gold : 'rgba(246,231,196,0.5)';
+        ctx.fillText(beaten ? 'рекорд побит' : 'рекорд ' + G.best, W - 26, 63);
+      }
       ctx.textAlign = 'left';
 
       /* ---------------------------------------------------------- combo */

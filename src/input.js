@@ -15,6 +15,16 @@
     Enter: 'confirm', NumpadEnter: 'confirm',
   };
 
+  /* A focused text field owns the keyboard. Nearly every letter is bound to
+     something here, so without this a nickname typed on the results screen
+     would slash, throw, mute and restart the game as it went in. */
+  function typing(e) {
+    const t = e && e.target;
+    if (!t) return false;
+    const tag = String(t.tagName || '').toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable === true;
+  }
+
   const Input = {
     now: Object.create(null),
     prev: Object.create(null),
@@ -28,6 +38,7 @@
 
     init() {
       window.addEventListener('keydown', (e) => {
+        if (typing(e)) return;
         const a = MAP[e.code];
         if (a) {
           if (!e.repeat) this.press(a);
@@ -37,6 +48,7 @@
       });
 
       window.addEventListener('keyup', (e) => {
+        if (typing(e)) return;
         const a = MAP[e.code];
         if (a) { this.now[a] = false; e.preventDefault(); }
       });

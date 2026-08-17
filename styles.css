@@ -232,38 +232,93 @@ kbd {
 .tips li { margin-bottom: 5px; }
 .tips b { color: var(--gold); font-weight: 600; }
 
-/* -------------------------------------------------------------- stats */
+/* -------------------------------------------------------------- result */
 
-.stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 18px;
-  margin: 16px 0 8px;
-  font-size: 14px;
-}
-.stats > div {
+/* One number is the result; everything else is a footnote to it. */
+.final {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 7px;
-  border-left: 2px solid rgba(245, 197, 66, 0.4);
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  margin: 14px 0 4px;
 }
-.stats span { color: rgba(246, 231, 196, 0.6); }
-.stats b { color: var(--gold); font-size: 15px; }
-
-.newbest {
-  margin: 12px 0 4px;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--gold);
+.final b {
+  font-size: clamp(36px, 8vw, 54px);
+  font-weight: 800;
+  line-height: 1;
   letter-spacing: 1px;
-  animation: pulse 1s ease-in-out infinite;
+  background: linear-gradient(180deg, #fff3cf 0%, var(--gold) 60%, #c8862a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
-.newbest.hidden { display: none; }
+.final span { font-size: 14px; letter-spacing: 1px; color: rgba(246, 231, 196, 0.6); }
 
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.details { margin: 0 0 16px; font-size: 13px; color: rgba(246, 231, 196, 0.6); }
+
+.place { margin: 0 0 14px; }
+.place.hidden { display: none; }
+.place label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: var(--gold);
+}
+.place input {
+  width: min(240px, 74%);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 15px;
+  text-align: center;
+  color: var(--cream);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(245, 197, 66, 0.42);
+  border-radius: 8px;
+  outline: none;
+}
+.place input:focus { border-color: var(--gold); background: rgba(245, 197, 66, 0.12); }
+
+/* --------------------------------------------------------- score table */
+
+.board { margin: 0 0 16px; }
+
+/* On a short landscape phone ten rows would push «Ещё раз» off the bottom of
+   the plate. The table is the part that gives: it shrinks and scrolls on its
+   own while the result and the buttons stay where the thumb expects them. */
+#screen-over .plate,
+#screen-scores .plate { display: flex; flex-direction: column; }
+#screen-over .board,
+#screen-scores .board { min-height: 5.5em; overflow-y: auto; } /* never below ~4 rows */
+.board-t { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
+.board-t td { padding: 6px 8px; border-bottom: 1px solid rgba(245, 197, 66, 0.12); }
+.board-t tr:last-child td { border-bottom: 0; }
+.board-t .rank { width: 2.5ch; text-align: right; color: rgba(246, 231, 196, 0.4); }
+.board-t .nick {
+  max-width: 0; /* with the fixed columns around it, this is what makes … work */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--cream);
+}
+.board-t .pts {
+  width: 8ch;
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+}
+.board-t .meta {
+  width: 9ch;
+  text-align: right;
+  white-space: nowrap; /* «1 120 м» must not fold onto a second line */
+  font-size: 12.5px;
+  color: rgba(246, 231, 196, 0.42);
+}
+.board-t .me td { background: rgba(245, 197, 66, 0.14); }
+.board-t .me .nick { color: #fff3cf; }
+.board-empty { margin: 4px 0 0; font-size: 13px; color: rgba(246, 231, 196, 0.45); }
 
 /* ------------------------------------------------------ corner buttons */
 
@@ -415,7 +470,19 @@ body.portrait #touch { display: none; }
   .btn { padding: 9px 16px; font-size: 14px; }
   h1 { letter-spacing: 2px; }
   h1 span { letter-spacing: 7px; }
-  .stats { font-size: 12.5px; gap: 6px 12px; margin: 12px 0 6px; }
+  /* the result screen has to fit a table now, so its decoration goes first */
+  #screen-over .ornament,
+  #screen-over .sub { display: none; }
+  #screen-over h2 { font-size: 20px; }
+  .final { margin: 8px 0 2px; }
+  .final b { font-size: clamp(30px, 7vh, 40px); }
+  .details { margin-bottom: 10px; font-size: 12px; }
+  .place { margin-bottom: 10px; }
+  .place label { margin-bottom: 4px; font-size: 12px; }
+  .place input { padding: 7px 10px; font-size: 14px; }
+  .board { margin-bottom: 10px; }
+  .board-t { font-size: 12.5px; }
+  .board-t td { padding: 4px 6px; }
 }
 
 /* the keyboard hints are noise on a device that has no keyboard */
